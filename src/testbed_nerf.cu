@@ -12,6 +12,8 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
+#include <nvtx3/nvToolsExt.h> //JW_profiling
+
 #include <neural-graphics-primitives/adam_optimizer.h>
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/common.h>
@@ -705,6 +707,7 @@ __global__ void generate_training_samples_nerf(
 	const float* __restrict__ extra_dims_gpu,
 	uint32_t n_extra_dims
 ) {
+	//nvtxRangePush("[JWprofile]testbed_nerf.cu->__global__ void generate_training_samples_nerf");//JW_profiling
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_rays) return;
 
@@ -828,6 +831,7 @@ __global__ void generate_training_samples_nerf(
 			max_level_ptr[j] = max_level;
 		}
 	}
+	//nvtxRangePop();//JW_profiling
 }
 
 
@@ -2439,6 +2443,9 @@ float Testbed::NerfCounters::update_after_training(uint32_t target_batch_size, b
 }
 
 void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaStream_t stream) {
+	cudaEvent_t start_JWLB, stop_JWLB;	float msec=0;	cudaEventCreate(&start_JWLB);	cudaEventCreate(&stop_JWLB);//JW_profiling
+	cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
+	//nvtxRangePush("[JWprofile]testbed_nerf.cu->Testbed::train_nerf");//JW_profiling
 	if (m_nerf.training.n_images_for_training == 0) {
 		return;
 	}
@@ -2457,7 +2464,10 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 		}
 	}
 	m_nerf.training.counters_rgb.prepare_for_training_steps(stream);
-
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf>-<prepare_for_training_steps>: " << msec << "ms";//JW_profiling
+	
+	cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 	if (m_nerf.training.n_steps_since_cam_update == 0) {
 		CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.training.cam_pos_gradient_gpu.data(), 0, m_nerf.training.cam_pos_gradient_gpu.get_bytes(), stream));
 		CUDA_CHECK_THROW(cudaMemsetAsync(m_nerf.training.cam_rot_gradient_gpu.data(), 0, m_nerf.training.cam_rot_gradient_gpu.get_bytes(), stream));
@@ -2487,10 +2497,15 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 	if (envmap_gradient) {
 		CUDA_CHECK_THROW(cudaMemsetAsync(envmap_gradient, 0, sizeof(float)*m_envmap.envmap->n_params(), stream));
 	}
-
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf>-prep_for_train_nerf_step: " << msec << "ms";//JW_profiling
+	
+	cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 	train_nerf_step(target_batch_size, m_nerf.training.counters_rgb, stream);
-
-
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf>-<train_nerf_step>: " << msec << "ms";//JW_profiling
+	
+	cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 	m_trainer->optimizer_step(stream, LOSS_SCALE());
 
 	++m_training_step;
@@ -2498,7 +2513,10 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 	if (envmap_gradient) {
 		m_envmap.trainer->optimizer_step(stream, LOSS_SCALE());
 	}
-
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf>-<optimizer_step>: " << msec << "ms";//JW_profiling
+	
+	cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 	float loss_scalar = m_nerf.training.counters_rgb.update_after_training(target_batch_size, get_loss_scalar, stream);
 	bool zero_records = m_nerf.training.counters_rgb.measured_batch_size == 0;
 	if (get_loss_scalar) {
@@ -2510,7 +2528,10 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 		tlog::warning() << "Nerf training generated 0 samples. Aborting training.";
 		m_train = false;
 	}
-
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf>-<update_after_training>: " << msec << "ms";//JW_profiling
+	
+	cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 	// Compute CDFs from the error map
 	m_nerf.training.n_steps_since_error_map_update += 1;
 	// This is low-overhead enough to warrant always being on.
@@ -2670,6 +2691,9 @@ void Testbed::train_nerf(uint32_t target_batch_size, bool get_loss_scalar, cudaS
 
 		m_nerf.training.n_steps_since_cam_update = 0;
 	}
+	//nvtxRangePop();//JW_profiling
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf>-finishing: " << msec << "ms";//JW_profiling
 }
 
 void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters& counters, cudaStream_t stream) {
@@ -2677,6 +2701,10 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 	const uint32_t max_samples = target_batch_size * 16; // Somewhat of a worst case
 	const uint32_t floats_per_coord = sizeof(NerfCoordinate) / sizeof(float) + m_nerf_network->n_extra_dims();
 	const uint32_t extra_stride = m_nerf_network->n_extra_dims() * sizeof(float); // extra stride on top of base NerfCoordinate struct
+
+	cudaEvent_t start_JWLB, stop_JWLB;	float msec=0;	cudaEventCreate(&start_JWLB);	cudaEventCreate(&stop_JWLB);//JW_profiling
+	cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
+	//nvtxRangePush("[JWprofile]testbed_nerf.cu->Testbed::train_nerf_step");//JW_profiling
 
 	GPUMemoryArena::Allocation alloc;
 	auto scratch = allocate_workspace_and_distribute<
@@ -2753,7 +2781,13 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 
 	auto hg_enc = dynamic_cast<GridEncoding<network_precision_t>*>(m_encoding.get());
 
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf_step>-preparation: " << msec << "ms";//JW_profiling
+
 	{
+		cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
+		nvtxRangePush("[JWprofile]testbed_nerf.cu->generate_training_samples_nerf");//JW_profiling
+
 		linear_kernel(generate_training_samples_nerf, 0, stream,
 			counters.rays_per_batch,
 			m_aabb,
@@ -2784,19 +2818,39 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 			m_nerf.training.extra_dims_gpu.data(),
 			m_nerf_network->n_extra_dims()
 		);
+		nvtxRangePop();//JW_profiling
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf_step>-<generate_training_samples_nerf>: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
+		nvtxRangePush("[JWprofile]testbed_nerf.cu->set_max_level_gpu1");//JW_profiling
 		if (hg_enc) {
 			hg_enc->set_max_level_gpu(m_max_level_rand_training ? max_level : nullptr);
 		}
+		nvtxRangePop();//JW_profiling
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf_step>-<set_max_level_gpu1>: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
+		nvtxRangePush("[JWprofile]testbed_nerf.cu->inference_mixed_precision");//JW_profiling
 		GPUMatrix<float> coords_matrix((float*)coords, floats_per_coord, max_inference);
 		GPUMatrix<network_precision_t> rgbsigma_matrix(mlp_out, padded_output_width, max_inference);
 		m_network->inference_mixed_precision(stream, coords_matrix, rgbsigma_matrix, false);
+		nvtxRangePop();//JW_profiling
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf_step>-<inference_mixed_precision>: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
+		nvtxRangePush("[JWprofile]testbed_nerf.cu->set_max_level_gpu2");//JW_profiling
 		if (hg_enc) {
 			hg_enc->set_max_level_gpu(m_max_level_rand_training ? max_level_compacted : nullptr);
 		}
+		nvtxRangePop();//JW_profiling
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf_step>-<set_max_level_gpu2>: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling		
+		nvtxRangePush("[JWprofile]testbed_nerf.cu->compute_loss_kernel_train_nerf");//JW_profiling
 		linear_kernel(compute_loss_kernel_train_nerf, 0, stream,
 			counters.rays_per_batch,
 			m_aabb,
@@ -2849,7 +2903,14 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 			m_nerf.training.depth_supervision_lambda,
 			m_nerf.training.near_distance
 		);
+		nvtxRangePop();//JW_profiling
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf_step>-<compute_loss_kernel_train_nerf>: " << msec << "ms";//JW_profiling
 	}
+
+
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling		
+	nvtxRangePush("[JWprofile]testbed_nerf.cu->training_step");//JW_profiling
 
 	fill_rollover_and_rescale<network_precision_t><<<n_blocks_linear(target_batch_size*padded_output_width), N_THREADS_LINEAR, 0, stream>>>(
 		target_batch_size, padded_output_width, counters.numsteps_counter_compacted.data(), dloss_dmlp_out
@@ -2867,8 +2928,14 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 	GPUMatrix<float> coords_gradient_matrix((float*)coords_gradient, floats_per_coord, target_batch_size);
 
 	m_trainer->training_step(stream, compacted_coords_matrix, {}, nullptr, false, prepare_input_gradients ? &coords_gradient_matrix : nullptr, false, GradientMode::Overwrite, &gradient_matrix);
+	nvtxRangePop();//JW_profiling
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf_step>-<training_step>: " << msec << "ms";//JW_profiling
 
+
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
 	if (train_extra_dims) {
+		nvtxRangePush("[JWprofile]testbed_nerf.cu->compute_extra_dims_gradient_train_nerf");//JW_profiling
 		// Compute extra-dim gradients
 		linear_kernel(compute_extra_dims_gradient_train_nerf, 0, stream,
 			counters.rays_per_batch,
@@ -2882,9 +2949,11 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 			PitchedPtr<NerfCoordinate>((NerfCoordinate*)coords_gradient, 1, 0, extra_stride),
 			sample_image_proportional_to_error ? m_nerf.training.error_map.cdf_img.data() : nullptr
 		);
+		nvtxRangePop();//JW_profiling
 	}
 
 	if (train_camera) {
+		nvtxRangePush("[JWprofile]testbed_nerf.cu->compute_cam_gradient_train_nerf");//JW_profiling
 		// Compute camera gradients
 		linear_kernel(compute_cam_gradient_train_nerf, 0, stream,
 			counters.rays_per_batch,
@@ -2912,6 +2981,7 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 			sample_image_proportional_to_error ? m_nerf.training.error_map.cdf_img.data() : nullptr,
 			m_nerf.training.error_map.cdf_resolution
 		);
+		nvtxRangePop();//JW_profiling
 	}
 
 	m_rng.advance();
@@ -2919,10 +2989,16 @@ void Testbed::train_nerf_step(uint32_t target_batch_size, Testbed::NerfCounters&
 	if (hg_enc) {
 		hg_enc->set_max_level_gpu(nullptr);
 	}
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed_nerf.cu-<train_nerf_step>-finishing: " << msec << "ms";//JW_profiling
+
+	//nvtxRangePop();//JW_profiling
 }
 
 
 void Testbed::training_prep_nerf(uint32_t batch_size, cudaStream_t stream) {
+	//nvtxRangePush("[JWprofile]testbed_nerf.cu->Testbed::training_prep_nerf");//JW_profiling
+
 	if (m_nerf.training.n_images_for_training == 0) {
 		return;
 	}
@@ -2935,6 +3011,7 @@ void Testbed::training_prep_nerf(uint32_t batch_size, cudaStream_t stream) {
 	} else {
 		update_density_grid_nerf(alpha, NERF_GRID_N_CELLS() / 4 * n_cascades, NERF_GRID_N_CELLS() / 4 * n_cascades, stream);
 	}
+	//nvtxRangePop();//JW_profiling
 }
 
 void Testbed::optimise_mesh_step(uint32_t n_steps) {

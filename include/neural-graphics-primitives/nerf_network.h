@@ -16,6 +16,9 @@
 
 #pragma once
 
+#include <time.h>	//JW_profiling
+#include <neural-graphics-primitives/helper_cuda.h>	//JW_profiling
+
 #include <tiny-cuda-nn/common.h>
 
 #include <tiny-cuda-nn/encoding.h>
@@ -103,22 +106,34 @@ public:
 	virtual ~NerfNetwork() { }
 
 	void inference_mixed_precision_impl(cudaStream_t stream, const GPUMatrixDynamic<float>& input, GPUMatrixDynamic<T>& output, bool use_inference_params = true) override {
+		cudaEvent_t start_JWLB, stop_JWLB;	float msec=0;	cudaEventCreate(&start_JWLB);	cudaEventCreate(&stop_JWLB);//JW_profiling
+		cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
+		
 		uint32_t batch_size = input.n();
 		GPUMatrixDynamic<T> density_network_input{m_pos_encoding->padded_output_width(), batch_size, stream, m_pos_encoding->preferred_output_layout()};
 		GPUMatrixDynamic<T> rgb_network_input{m_rgb_network_input_width, batch_size, stream, m_dir_encoding->preferred_output_layout()};
 
 		GPUMatrixDynamic<T> density_network_output = rgb_network_input.slice_rows(0, m_density_network->padded_output_width());
 		GPUMatrixDynamic<T> rgb_network_output{output.data(), m_rgb_network->padded_output_width(), batch_size, output.layout()};
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);
+		tlog::info() << "[JWLB]nerf_network.cu-<inference_mixed_precision_impl>-preparation: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 		m_pos_encoding->inference_mixed_precision(
 			stream,
 			input.slice_rows(0, m_pos_encoding->input_width()),
 			density_network_input,
 			use_inference_params
 		);
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<inference_mixed_precision_impl>-pos_encoding: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 		m_density_network->inference_mixed_precision(stream, density_network_input, density_network_output, use_inference_params);
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<inference_mixed_precision_impl>-density_network: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 		auto dir_out = rgb_network_input.slice_rows(m_density_network->padded_output_width(), m_dir_encoding->padded_output_width());
 		m_dir_encoding->inference_mixed_precision(
 			stream,
@@ -126,9 +141,15 @@ public:
 			dir_out,
 			use_inference_params
 		);
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<inference_mixed_precision_impl>-dir_encoding: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 		m_rgb_network->inference_mixed_precision(stream, rgb_network_input, rgb_network_output, use_inference_params);
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<inference_mixed_precision_impl>-rgb_network: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
 		linear_kernel(extract_density<T>, 0, stream,
 			batch_size,
 			density_network_output.layout() == AoS ? density_network_output.stride() : 1,
@@ -136,6 +157,9 @@ public:
 			density_network_output.data(),
 			output.data() + 3 * (output.layout() == AoS ? 1 : batch_size)
 		);
+		cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<inference_mixed_precision_impl>-<extract_density>: " << msec << "ms";//JW_profiling
+
 	}
 
 	uint32_t padded_density_output_width() const {
@@ -146,11 +170,35 @@ public:
 		// Make sure our temporary buffers have the correct size for the given batch size
 		uint32_t batch_size = input.n();
 
+		//float msec=0;//JW_profiling
+		//auto start_JWLB = std::chrono::steady_clock::now();//JW_profiling
+		//clock_t start_JWLB, stop_JWLB;	float msec=0;	//JW_profiling
+		//start_JWLB = clock();	//JW_profiling
+		//cudaGraph_t graph_JWLB; //JW_profiling
+		cudaEvent_t start_JWLB, stop_JWLB;	float msec=0;	cudaEventCreate(&start_JWLB);	cudaEventCreate(&stop_JWLB);//JW_profiling
+		//cudaStreamBeginCapture(steam, cudaStreamCaptureModeGlobal);//JW_profiling
+		//cudaEventRecord(start_JWLB, stream);//JW_profiling
+		//cudaEventSynchronize(start_JWLB);//JW_profiling
+		//checkCudaErrors(cudaEventRecord(start_JWLB));	//cudaEventSynchronize(start_JWLB);//JW_profiling
+		cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+
 		auto forward = std::make_unique<ForwardContext>();
 
 		forward->density_network_input = GPUMatrixDynamic<T>{m_pos_encoding->padded_output_width(), batch_size, stream, m_pos_encoding->preferred_output_layout()};
 		forward->rgb_network_input = GPUMatrixDynamic<T>{m_rgb_network_input_width, batch_size, stream, m_dir_encoding->preferred_output_layout()};
+		//auto stop_JWLB = std::chrono::steady_clock::now();//JW_profiling
+		//tlog::info() << "[JWLB]nerf_network.cu-<forward_impl>-preparation: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop_JWLB - start_JWLB).count() << "ms";//JW_profiling
+		//stop_JWLB = clock();	msec = (double)(stop_JWLB-start_JWLB);//JW_profiling
+		//checkCudaErrors(cudaEventRecord(stop_JWLB));	//cudaEventSynchronize(stop_JWLB); //JW_profiling
+		cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//checkCudaErrors(cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB));//JW_profiling
+		//cudaEventRecord(stop_JWLB, stream);	//cudaEventSynchronize(stop_JWLB); //JW_profiling
+		cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<forward_impl>-preparation: " << msec << "ms";//JW_profiling
 
+		//start_JWLB = std::chrono::steady_clock::now();//JW_profiling
+		cudaEventRecord(start_JWLB, stream);	//cudaEventSynchronize(start_JWLB);//JW_profiling		
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		forward->pos_encoding_ctx = m_pos_encoding->forward(
 			stream,
 			input.slice_rows(0, m_pos_encoding->input_width()),
@@ -158,10 +206,24 @@ public:
 			use_inference_params,
 			prepare_input_gradients
 		);
+		//stop_JWLB = std::chrono::steady_clock::now();//JW_profiling
+		//tlog::info() << "[JWLB]nerf_network.cu-<forward_impl>-forward->m_pos_encoding_ctx: " << std::chrono::duration_cast<std::chrono::milliseconds>(stop_JWLB - start_JWLB).count() << "ms";//JW_profiling
+		cudaEventRecord(stop_JWLB, stream);	//cudaEventSynchronize(stop_JWLB);//JW_profiling
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<forward_impl>-forward->m_pos_encoding_ctx: " << msec << "ms";//JW_profiling
 
+		cudaEventRecord(start_JWLB, stream);		//cudaEventSynchronize(start_JWLB);//JW_profiling		
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		forward->density_network_output = forward->rgb_network_input.slice_rows(0, m_density_network->padded_output_width());
 		forward->density_network_ctx = m_density_network->forward(stream, forward->density_network_input, &forward->density_network_output, use_inference_params, prepare_input_gradients);
+		cudaEventRecord(stop_JWLB, stream);	//cudaEventSynchronize(stop_JWLB);//JW_profiling
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<forward_impl>-forward->density_network_ctx: " << msec << "ms";//JW_profiling
 
+		//cudaEventRecord(start_JWLB);	//cudaEventSynchronize(start_JWLB);//JW_profiling
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		auto dir_out = forward->rgb_network_input.slice_rows(m_density_network->padded_output_width(), m_dir_encoding->padded_output_width());
 		forward->dir_encoding_ctx = m_dir_encoding->forward(
 			stream,
@@ -170,18 +232,34 @@ public:
 			use_inference_params,
 			prepare_input_gradients
 		);
+		//cudaEventRecord(stop_JWLB);	//cudaEventSynchronize(stop_JWLB);
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<forward_impl>-forward->dir_encoding_ctx: " << msec << "ms";//JW_profiling
 
+		//cudaEventRecord(start_JWLB);	//cudaEventSynchronize(start_JWLB);//JW_profiling
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		if (output) {
 			forward->rgb_network_output = GPUMatrixDynamic<T>{output->data(), m_rgb_network->padded_output_width(), batch_size, output->layout()};
 		}
 
 		forward->rgb_network_ctx = m_rgb_network->forward(stream, forward->rgb_network_input, output ? &forward->rgb_network_output : nullptr, use_inference_params, prepare_input_gradients);
+		//cudaEventRecord(stop_JWLB);	//cudaEventSynchronize(stop_JWLB);
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<forward_impl>-forward->rgb_network_ctx: " << msec << "ms";//JW_profiling
 
+		//cudaEventRecord(start_JWLB);	//cudaEventSynchronize(start_JWLB);//JW_profiling		
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		if (output) {
 			linear_kernel(extract_density<T>, 0, stream,
 				batch_size, m_dir_encoding->preferred_output_layout() == AoS ? forward->density_network_output.stride() : 1, padded_output_width(), forward->density_network_output.data(), output->data()+3
 			);
 		}
+		//cudaEventRecord(stop_JWLB);	//cudaEventSynchronize(stop_JWLB);
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<forward_impl>-<extract_density>: " << msec << "ms";//JW_profiling
 
 		return forward;
 	}
@@ -197,20 +275,35 @@ public:
 		GradientMode param_gradients_mode = GradientMode::Overwrite
 	) override {
 		const auto& forward = dynamic_cast<const ForwardContext&>(ctx);
-
 		// Make sure our teporary buffers have the correct size for the given batch size
 		uint32_t batch_size = input.n();
 
+		cudaEvent_t start_JWLB, stop_JWLB;	float msec=0;	cudaEventCreate(&start_JWLB);	cudaEventCreate(&stop_JWLB);//JW_profiling
+
+		//cudaEventRecord(start_JWLB);	//cudaEventSynchronize(start_JWLB);//JW_profiling
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		GPUMatrix<T> dL_drgb{m_rgb_network->padded_output_width(), batch_size, stream};
 		CUDA_CHECK_THROW(cudaMemsetAsync(dL_drgb.data(), 0, dL_drgb.n_bytes(), stream));
 		linear_kernel(extract_rgb<T>, 0, stream,
 			batch_size*3, dL_drgb.m(), dL_doutput.m(), dL_doutput.data(), dL_drgb.data()
 		);
+		//cudaEventRecord(stop_JWLB);	//cudaEventSynchronize(stop_JWLB);
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<backward_impl>-<extract_rgb>: " << msec << "ms";//JW_profiling
 
+		//cudaEventRecord(start_JWLB);	//cudaEventSynchronize(start_JWLB);//JW_profiling				
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		const GPUMatrixDynamic<T> rgb_network_output{(T*)output.data(), m_rgb_network->padded_output_width(), batch_size, output.layout()};
 		GPUMatrixDynamic<T> dL_drgb_network_input{m_rgb_network_input_width, batch_size, stream, m_dir_encoding->preferred_output_layout()};
 		m_rgb_network->backward(stream, *forward.rgb_network_ctx, forward.rgb_network_input, rgb_network_output, dL_drgb, &dL_drgb_network_input, use_inference_params, param_gradients_mode);
+		//cudaEventRecord(stop_JWLB);	//cudaEventSynchronize(stop_JWLB);
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<backward_impl>-m_rgb_network->backward: " << msec << "ms";//JW_profiling
 
+		//cudaEventRecord(start_JWLB);	//cudaEventSynchronize(start_JWLB);//JW_profiling
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		// Backprop through dir encoding if it is trainable or if we need input gradients
 		if (m_dir_encoding->n_params() > 0 || dL_dinput) {
 			GPUMatrixDynamic<T> dL_ddir_encoding_output = dL_drgb_network_input.slice_rows(m_density_network->padded_output_width(), m_dir_encoding->padded_output_width());
@@ -230,7 +323,13 @@ public:
 				param_gradients_mode
 			);
 		}
+		//cudaEventRecord(stop_JWLB);	//cudaEventSynchronize(stop_JWLB);
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<backward_impl>-m_dir_encoding->backward: " << msec << "ms";//JW_profiling
 
+		//cudaEventRecord(start_JWLB);	//cudaEventSynchronize(start_JWLB);//JW_profiling
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		GPUMatrixDynamic<T> dL_ddensity_network_output = dL_drgb_network_input.slice_rows(0, m_density_network->padded_output_width());
 		linear_kernel(add_density_gradient<T>, 0, stream,
 			batch_size,
@@ -239,14 +338,26 @@ public:
 			dL_ddensity_network_output.layout() == RM ? 1 : dL_ddensity_network_output.stride(),
 			dL_ddensity_network_output.data()
 		);
+		//cudaEventRecord(stop_JWLB);	//cudaEventSynchronize(stop_JWLB);
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		//tlog::info() << "[JWLB]nerf_network.cu-<backward_impl>-<add_density_gradient>: " << msec << "ms";//JW_profiling
 
+		//cudaEventRecord(start_JWLB);	//cudaEventSynchronize(start_JWLB);//JW_profiling
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		GPUMatrixDynamic<T> dL_ddensity_network_input;
 		if (m_pos_encoding->n_params() > 0 || dL_dinput) {
 			dL_ddensity_network_input = GPUMatrixDynamic<T>{m_pos_encoding->padded_output_width(), batch_size, stream, m_pos_encoding->preferred_output_layout()};
 		}
 
 		m_density_network->backward(stream, *forward.density_network_ctx, forward.density_network_input, forward.density_network_output, dL_ddensity_network_output, dL_ddensity_network_input.data() ? &dL_ddensity_network_input : nullptr, use_inference_params, param_gradients_mode);
+		//cudaEventRecord(stop_JWLB);	//cudaEventSynchronize(stop_JWLB);
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<backward_impl>-m_density_network->backward: " << msec << "ms";//JW_profiling
 
+		//cudaEventRecord(start_JWLB);	//cudaEventSynchronize(start_JWLB);//JW_profiling
+		//cudaEventRecordWithFlags(start_JWLB, stream, cudaEventRecordExternal);//JW_profiling
 		// Backprop through pos encoding if it is trainable or if we need input gradients
 		if (dL_ddensity_network_input.data()) {
 			GPUMatrixDynamic<float> dL_dpos_encoding_input;
@@ -265,6 +376,10 @@ public:
 				param_gradients_mode
 			);
 		}
+		//cudaEventRecord(stop_JWLB);	//cudaEventSynchronize(stop_JWLB);
+		//cudaEventRecordWithFlags(stop_JWLB, stream, cudaEventRecordExternal);//JW_profiling
+		//cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+		tlog::info() << "[JWLB]nerf_network.cu-<backward_impl>-m_pos_encoding->backward: " << msec << "ms";//JW_profiling
 	}
 
 	void density(cudaStream_t stream, const GPUMatrixDynamic<float>& input, GPUMatrixDynamic<T>& output, bool use_inference_params = true) {

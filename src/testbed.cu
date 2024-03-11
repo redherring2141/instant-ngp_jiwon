@@ -12,6 +12,8 @@
  *  @author Thomas Müller & Alex Evans, NVIDIA
  */
 
+#include <nvtx3/nvToolsExt.h> //JW_profiling
+
 #include <neural-graphics-primitives/common.h>
 #include <neural-graphics-primitives/common_device.cuh>
 #include <neural-graphics-primitives/json_binding.h>
@@ -2711,10 +2713,17 @@ void Testbed::prepare_next_camera_path_frame() {
 }
 
 void Testbed::train_and_render(bool skip_rendering) {
+	cudaEvent_t start_JWLB, stop_JWLB;	float msec=0;	cudaEventCreate(&start_JWLB);	cudaEventCreate(&stop_JWLB);//JW_profiling
+	cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
+	//nvtxRangePush("[JWprofile]testbed.cu->Testbed::train_and_render");//JW_profiling
+
 	if (m_train) {
 		train(m_training_batch_size);
 	}
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train_and_render>-<train>: " << msec << "ms";//JW_profiling
 
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
 	// If we don't have a trainer, as can happen when having loaded training data or changed modes without having
 	// explicitly loaded a new neural network.
 	if (m_testbed_mode != ETestbedMode::None && !m_network) {
@@ -2733,6 +2742,9 @@ void Testbed::train_and_render(bool skip_rendering) {
 	float frame_ms = m_camera_path.rendering ? 0.0f : m_frame_ms.val();
 	apply_camera_smoothing(frame_ms);
 
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train_and_render>-others: " << msec << "ms";//JW_profiling
+	
 	if (!m_render_window || !m_render || skip_rendering) {
 		return;
 	}
@@ -2955,6 +2967,8 @@ void Testbed::train_and_render(bool skip_rendering) {
 #endif
 
 	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
+	
+	//nvtxRangePop();//JW_profiling
 }
 
 
@@ -3330,6 +3344,8 @@ void Testbed::update_vr_performance_settings() {
 }
 
 bool Testbed::frame() {
+	//nvtxRangePush("[JWprofile]testbed.cu->Testbed::frame");//JW_profiling_end
+
 #ifdef NGP_GUI
 	if (m_render_window) {
 		if (!begin_frame()) {
@@ -3426,6 +3442,8 @@ bool Testbed::frame() {
 		m_hmd->end_frame(m_vr_frame_info, m_ndc_zfar / m_scale, m_ndc_znear / m_scale, m_vr_use_depth_reproject);
 	}
 #endif
+
+	//nvtxRangePop(); //JW_profiling
 
 	return true;
 }
@@ -3969,6 +3987,10 @@ bool Testbed::clear_tmp_dir() {
 }
 
 void Testbed::train(uint32_t batch_size) {
+	cudaEvent_t start_JWLB, stop_JWLB;	float msec=0;	cudaEventCreate(&start_JWLB);	cudaEventCreate(&stop_JWLB);//JW_profiling
+	cudaEventRecord(start_JWLB);	cudaEventSynchronize(start_JWLB);//JW_profiling
+	//nvtxRangePush("[JWprofile]testbed.cu->Testbed::train");//JW_profiling
+
 	if (!m_training_data_available || m_camera_path.rendering) {
 		m_train = false;
 		return;
@@ -3979,7 +4001,10 @@ void Testbed::train(uint32_t batch_size) {
 	}
 
 	set_all_devices_dirty();
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train>-<set_all_devices_dirty>: " << msec << "ms";//JW_profiling
 
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
 	// If we don't have a trainer, as can happen when having loaded training data or changed modes without having
 	// explicitly loaded a new neural network.
 	if (!m_trainer) {
@@ -3988,7 +4013,10 @@ void Testbed::train(uint32_t batch_size) {
 			throw std::runtime_error{"Unable to create a neural network trainer."};
 		}
 	}
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train>-<reload_network_from_file>: " << msec << "ms";//JW_profiling
 
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
 	if (m_testbed_mode == ETestbedMode::Nerf) {
 		if (m_nerf.training.optimize_extra_dims) {
 			if (m_nerf.training.dataset.n_extra_learnable_dims == 0) {
@@ -3997,12 +4025,18 @@ void Testbed::train(uint32_t batch_size) {
 			}
 		}
 	}
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train>-<reset_network>: " << msec << "ms";//JW_profiling
 
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
 	if (!m_dlss) {
 		// No immediate redraw necessary
 		reset_accumulation(false, false);
 	}
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train>-<reset_accumulation>: " << msec << "ms";//JW_profiling
 
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
 	uint32_t n_prep_to_skip = m_testbed_mode == ETestbedMode::Nerf ? clamp(m_training_step / 16u, 1u, 16u) : 1u;
 	if (m_training_step % n_prep_to_skip == 0) {
 		auto start = std::chrono::steady_clock::now();
@@ -4020,7 +4054,10 @@ void Testbed::train(uint32_t batch_size) {
 
 		CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	}
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train>-<trainig_prep_nerf>: " << msec << "ms";//JW_profiling
 
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
 	// Find leaf optimizer and update its settings
 	json* leaf_optimizer_config = &m_network_config["optimizer"];
 	while (leaf_optimizer_config->contains("nested")) {
@@ -4029,7 +4066,10 @@ void Testbed::train(uint32_t batch_size) {
 	(*leaf_optimizer_config)["optimize_matrix_params"] = m_train_network;
 	(*leaf_optimizer_config)["optimize_non_matrix_params"] = m_train_encoding;
 	m_optimizer->update_hyperparams(m_network_config["optimizer"]);
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train>-<update_hyperparams>: " << msec << "ms";//JW_profiling
 
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
 	bool get_loss_scalar = m_training_step % 16 == 0;
 
 	{
@@ -4048,10 +4088,20 @@ void Testbed::train(uint32_t batch_size) {
 
 		CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 	}
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train>-<train_nerf>: " << msec << "ms";//JW_profiling
 
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
 	if (get_loss_scalar) {
 		update_loss_graph();
 	}
+
+	//nvtxRangePop();//JW_profiling
+	cudaEventRecord(stop_JWLB);	cudaEventSynchronize(stop_JWLB);	cudaEventElapsedTime(&msec, start_JWLB, stop_JWLB);//JW_profiling
+	tlog::info() << "[JWLB]testbed.cu-<train>-<update_loss_graph>: " << msec << "ms";//JW_profiling
+
+	cudaEventRecord(start_JWLB);		cudaEventSynchronize(start_JWLB);//JW_profiling
+
 }
 
 vec2 Testbed::calc_focal_length(const ivec2& resolution, const vec2& relative_focal_length, int fov_axis, float zoom) const {

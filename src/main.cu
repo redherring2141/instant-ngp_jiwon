@@ -12,6 +12,8 @@
  *  @author Thomas Müller, NVIDIA
  */
 
+#include <nvtx3/nvToolsExt.h> //JW_profiling
+
 #include <neural-graphics-primitives/testbed.h>
 
 #include <tiny-cuda-nn/common.h>
@@ -32,6 +34,9 @@ int main_func(const std::vector<std::string>& arguments) {
 		"Version " NGP_VERSION,
 		"",
 	};
+
+	//nvtxRangePush("[JWprofile]main.cu->main_func");//JW_profiling
+	cudaEvent_t start, stop;	cudaEventCreate(&start);	cudaEventCreate(&stop);	cudaEventRecord(start);//JW_profiling
 
 	HelpFlag help_flag{
 		parser,
@@ -180,12 +185,25 @@ int main_func(const std::vector<std::string>& arguments) {
 		testbed.init_vr();
 	}
 
+
+	float sum_msec, msec = 0; cudaEventRecord(stop); cudaEventSynchronize(stop);	cudaEventElapsedTime(&msec, start, stop);//JW_profiling
+	tlog::info() << "Preparation time=" << msec;//JW_profiling
 	// Render/training loop
 	while (testbed.frame()) {
 		if (!gui) {
-			tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
+			cudaEventRecord(stop); cudaEventSynchronize(stop); cudaEventElapsedTime(&msec, start, stop); sum_msec=sum_msec+msec;//JW_profiling
+			tlog::info() << "Iteration=" << testbed.m_training_step
+						 << " Loss=" << testbed.m_loss_scalar.val()
+						 << " PSNR=" << -10.0*log(testbed.m_loss_scalar.val())/log(10.0)//JW_profiling
+						 << " Delta_t=" << msec	//JW_profiling
+						 << " Elapsed time=" << sum_msec << "ms";	//JW_profiling
+
+			if (testbed.m_training_step > 1000) break;
+			cudaEventRecord(start); cudaEventSynchronize(start);//JW_profiling
 		}
 	}
+
+	//nvtxRangePop(); //JW_profiling
 
 	return 0;
 }

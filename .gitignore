@@ -9,6 +9,7 @@
 /venv
 /video
 /instant-ngp
+/nsight_profile
 /*.dll
 /*.exe
 /*.json
