@@ -242,12 +242,12 @@ if __name__ == "__main__":
 				image = testbed.render(resolution[0], resolution[1], spp, True)
 
 				if i == 0:
-					write_image(f"ref.png", ref_image)
-					write_image(f"out.png", image)
+					#write_image(f"ref.png", ref_image)
+					#write_image(f"out.png", image)
 
 					diffimg = np.absolute(image - ref_image)
 					diffimg[...,3:4] = 1.0
-					write_image("diff.png", diffimg)
+                                        #write_image("diff.png", diffimg)
 
 				A = np.clip(linear_to_srgb(image[...,:3]), 0.0, 1.0)
 				R = np.clip(linear_to_srgb(ref_image[...,:3]), 0.0, 1.0)
@@ -292,14 +292,14 @@ if __name__ == "__main__":
 			print(f"rendering {outname}")
 			image = testbed.render(args.width or int(ref_transforms["w"]), args.height or int(ref_transforms["h"]), args.screenshot_spp, True)
 			os.makedirs(os.path.dirname(outname), exist_ok=True)
-			write_image(outname, image)
+			#write_image(outname, image)
 	elif args.screenshot_dir:
 		outname = os.path.join(args.screenshot_dir, args.scene + "_" + network_stem)
 		print(f"Rendering {outname}.png")
 		image = testbed.render(args.width or 1920, args.height or 1080, args.screenshot_spp, True)
 		if os.path.dirname(outname) != "":
 			os.makedirs(os.path.dirname(outname), exist_ok=True)
-		write_image(outname + ".png", image)
+		#write_image(outname + ".png", image)
 
 	if args.video_camera_path:
 		testbed.load_camera_path(args.video_camera_path)
@@ -327,6 +327,8 @@ if __name__ == "__main__":
 				continue
 
 			frame = testbed.render(resolution[0], resolution[1], args.video_spp, True, float(i)/n_frames, float(i + 1)/n_frames, args.video_fps, shutter_fraction=0.5)
+
+'''
 			if save_frames:
 				write_image(args.video_output % i, np.clip(frame * 2**args.exposure, 0.0, 1.0), quality=100)
 			else:
@@ -336,3 +338,4 @@ if __name__ == "__main__":
 			os.system(f"ffmpeg -y -framerate {args.video_fps} -i tmp/%04d.jpg -c:v libx264 -pix_fmt yuv420p {args.video_output}")
 
 		shutil.rmtree("tmp")
+'''
