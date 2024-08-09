@@ -1,0 +1,39 @@
+name: instantNGP
+channels:
+  - defaults
+dependencies:
+  - _libgcc_mutex=0.1=main
+  - _openmp_mutex=5.1=51_gnu
+  - bzip2=1.0.8=h998d150_6
+  - ca-certificates=2024.7.2=hd43f75c_0
+  - expat=2.6.2=h419075a_0
+  - ld_impl_linux-aarch64=2.38=h8131f2d_1
+  - libffi=3.4.4=h419075a_1
+  - libgcc-ng=11.2.0=h1234567_1
+  - libgomp=11.2.0=h1234567_1
+  - libstdcxx-ng=11.2.0=h1234567_1
+  - libuuid=1.41.5=h998d150_0
+  - ncurses=6.4=h419075a_0
+  - openssl=3.0.14=h998d150_0
+  - pip=24.0=py312hd43f75c_0
+  - python=3.12.4=h8edadfe_1
+  - readline=8.2=h998d150_0
+  - setuptools=69.5.1=py312hd43f75c_0
+  - sqlite=3.45.3=h998d150_0
+  - tk=8.6.14=h987d8db_0
+  - tzdata=2024a=h04d1e81_0
+  - wheel=0.43.0=py312hd43f75c_0
+  - xz=5.4.6=h998d150_1
+  - zlib=1.2.13=h998d150_1
+  - pip:
+      - commentjson==0.9.0
+      - imageio==2.34.2
+      - lark-parser==0.7.8
+      - numpy==2.0.1
+      - opencv-python-headless==4.10.0.84
+      - pillow==10.4.0
+      - pybind11==2.13.1
+      - pyquaternion==0.9.9
+      - scipy==1.14.0
+      - tqdm==4.66.5
+prefix: /home/jetson-agx/miniconda3/envs/instantNGP
