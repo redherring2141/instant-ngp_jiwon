@@ -291,4 +291,5 @@ else:
     print("[INFO] Error: NO transforms.json file in the path.\n")
 
 write_json(path, 'transforms_train.json', frames_train, W, H, fl)
+write_json(path, 'transforms_val.json', frames_test[::10], W, H, fl)
 write_json(path, 'transforms_test.json', frames_test, W, H, fl)
