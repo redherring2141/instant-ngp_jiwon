@@ -232,41 +232,40 @@ if __name__ == "__main__":
 		testbed.shall_train = False
 		testbed.load_training_data(args.test_transforms)
 
-		for repeat in range(5):#JWLB_20240805
-			with tqdm(range(testbed.nerf.training.dataset.n_images), unit="images", desc=f"Rendering test frame") as t:
-				for i in t:
-					resolution = testbed.nerf.training.dataset.metadata[i].resolution
-					testbed.render_ground_truth = True
-					testbed.set_camera_to_training_view(i)
-					ref_image = testbed.render(resolution[0], resolution[1], 1, True)
-					testbed.render_ground_truth = False
-					image = testbed.render(resolution[0], resolution[1], spp, True)
+		with tqdm(range(testbed.nerf.training.dataset.n_images), unit="images", desc=f"Rendering test frame") as t:
+			for i in t:
+				resolution = testbed.nerf.training.dataset.metadata[i].resolution
+				testbed.render_ground_truth = True
+				testbed.set_camera_to_training_view(i)
+				ref_image = testbed.render(resolution[0], resolution[1], 1, True)
+				testbed.render_ground_truth = False
+				image = testbed.render(resolution[0], resolution[1], spp, True)
 
-		# 			if i == 0:
-		# 				#write_image(f"ref.png", ref_image)
-		# 				#write_image(f"out.png", image)
+				if i == 0:
+					write_image(f"ref.png", ref_image)
+					write_image(f"out.png", image)
 
-		# 				diffimg = np.absolute(image - ref_image)
-		# 				diffimg[...,3:4] = 1.0
-		# 				#write_image("diff.png", diffimg)
+					diffimg = np.absolute(image - ref_image)
+					diffimg[...,3:4] = 1.0
+					write_image("diff.png", diffimg)
 
-		# 			A = np.clip(linear_to_srgb(image[...,:3]), 0.0, 1.0)
-		# 			R = np.clip(linear_to_srgb(ref_image[...,:3]), 0.0, 1.0)
-		# 			mse = float(compute_error("MSE", A, R))
-		# 			ssim = float(compute_error("SSIM", A, R))
-		# 			totssim += ssim
-		# 			totmse += mse
-		# 			psnr = mse2psnr(mse)
-		# 			totpsnr += psnr
-		# 			minpsnr = psnr if psnr<minpsnr else minpsnr
-		# 			maxpsnr = psnr if psnr>maxpsnr else maxpsnr
-		# 			totcount = totcount+1
-		# 			t.set_postfix(psnr = totpsnr/(totcount or 1))
+				A = np.clip(linear_to_srgb(image[...,:3]), 0.0, 1.0)
+				R = np.clip(linear_to_srgb(ref_image[...,:3]), 0.0, 1.0)
+				mse = float(compute_error("MSE", A, R))
+				ssim = float(compute_error("SSIM", A, R))
+				totssim += ssim
+				totmse += mse
+				psnr = mse2psnr(mse)
+				totpsnr += psnr
+				minpsnr = psnr if psnr<minpsnr else minpsnr
+				maxpsnr = psnr if psnr>maxpsnr else maxpsnr
+				totcount = totcount+1
+				t.set_postfix(psnr = totpsnr/(totcount or 1))
 
-		# psnr_avgmse = mse2psnr(totmse/(totcount or 1))
-		# psnr = totpsnr/(totcount or 1)
-		# ssim = totssim/(totcount or 1)
-		# print(f"PSNR={psnr} [min={minpsnr} max={maxpsnr}] SSIM={ssim}")
+		psnr_avgmse = mse2psnr(totmse/(totcount or 1))
+		psnr = totpsnr/(totcount or 1)
+		ssim = totssim/(totcount or 1)
+		print(f"PSNR={psnr} [min={minpsnr} max={maxpsnr}] SSIM={ssim}")
 
 	if args.save_mesh:
 		res = args.marching_cubes_res or 256

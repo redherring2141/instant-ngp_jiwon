@@ -9,7 +9,8 @@ str2="Xavier"
 # done
 
 #Inference
-for DATA in playroom drjohnson train truck counter bonsai room kitchen treehill flowers stump garden bicycle 
+#for DATA in playroom drjohnson train truck counter bonsai room kitchen treehill flowers stump garden bicycle 
+for DATA in counter bonsai room kitchen treehill flowers stump garden bicycle 
 do
     if [ $1 == $str1 ];
     then
